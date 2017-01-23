@@ -19,6 +19,7 @@
 
 #include "interface/mmal/mmal.h"
 #include "interface/mmal/util/mmal_default_components.h"
+#include "interface/mmal/util/mmal_util_params.h"
 #include "interface/mmal/util/mmal_connection.h"
 
 #include "vgfont.h"
@@ -26,6 +27,11 @@
 #define MMAL_CAMERA_PREVIEW_PORT 0
 #define MMAL_CAMERA_VIDEO_PORT 1
 #define MMAL_CAMERA_CAPTURE_PORT 2
+
+	int haarL = 20;
+	int haarH = 80;
+	float haarScale = 1.1;
+	int scaleFactor = 10;
 
 typedef struct {
     int video_width;
@@ -37,6 +43,7 @@ typedef struct {
     float video_fps;
     MMAL_POOL_T *camera_video_port_pool;
     CvHaarClassifierCascade *cascade;
+	CvHaarClassifierCascade *cascade1;
     CvMemStorage* storage;
     IplImage* image;
     IplImage* image2;
@@ -65,6 +72,7 @@ static void video_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffe
     mmal_buffer_header_mem_lock(buffer);
     memcpy(userdata->image->imageData, buffer->data, userdata->video_width * userdata->video_height);
     mmal_buffer_header_mem_unlock(buffer);
+	
     //printf("img = %d w=%d, h=%d\n", img, img->width, img->height);
 
     if (vcos_semaphore_trywait(&(userdata->complete_semaphore)) != VCOS_SUCCESS) {
@@ -84,7 +92,7 @@ static void video_buffer_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffe
             fps = frame_count;
         }
         userdata->video_fps = fps;
-        printf("  Frame = %d, Frame Post %d, Framerate = %.0f fps \n", frame_count, frame_post_count, fps);
+        //printf("  Frame = %d, Frame Post %d, Framerate = %.0f fps \n", frame_count, frame_post_count, fps);
     }
 
     mmal_buffer_header_release(buffer);
@@ -113,6 +121,9 @@ int main(int argc, char** argv) {
     MMAL_CONNECTION_T *camera_preview_connection = 0;
     PORT_USERDATA userdata;
     int display_width, display_height;
+	
+	CvRect* r;
+	CvSeq* objects;
 
     printf("Running...\n");
 
@@ -122,8 +133,8 @@ int main(int argc, char** argv) {
     userdata.preview_height = 720 / 1;
     userdata.video_width = 1280 / 1;
     userdata.video_height = 720 / 1;
-    userdata.opencv_width = 1280 / 4;
-    userdata.opencv_height = 720 / 4;
+    userdata.opencv_width = 230; //1280 / 4;
+    userdata.opencv_height = 130; //720 / 4;
 
 
     graphics_get_display_size(0, &display_width, &display_height);
@@ -136,9 +147,16 @@ int main(int argc, char** argv) {
 
     /* setup opencv */
     userdata.cascade = (CvHaarClassifierCascade*) cvLoad("/usr/share/opencv/haarcascades/haarcascade_frontalface_alt.xml", NULL, NULL, NULL);
+	userdata.cascade1 = (CvHaarClassifierCascade*) cvLoad("/usr/share/opencv/haarcascades/haarcascade_profileface.xml", NULL, NULL, NULL);
     userdata.storage = cvCreateMemStorage(0);
     userdata.image = cvCreateImage(cvSize(userdata.video_width, userdata.video_height), IPL_DEPTH_8U, 1);
-    userdata.image2 = cvCreateImage(cvSize(userdata.opencv_width, userdata.opencv_height), IPL_DEPTH_8U, 1);
+	userdata.image2 = cvCreateImage(cvSize(userdata.opencv_width, userdata.opencv_height), IPL_DEPTH_8U, 0);
+	
+	
+
+	
+	
+	
     if (!userdata.cascade) {
         printf("Error: unable to load harrcascade\n");
     }
@@ -171,6 +189,69 @@ int main(int argc, char** argv) {
 
         mmal_port_parameter_set(camera->control, &cam_config.hdr);
     }
+	
+	
+	/**
+ * Set exposure mode for images
+ * @param camera Pointer to camera component
+ * @param mode Exposure mode to set from
+ *   - MMAL_PARAM_EXPOSUREMODE_OFF,
+ *   - MMAL_PARAM_EXPOSUREMODE_AUTO,
+ *   - MMAL_PARAM_EXPOSUREMODE_NIGHT,
+ *   - MMAL_PARAM_EXPOSUREMODE_NIGHTPREVIEW,
+ *   - MMAL_PARAM_EXPOSUREMODE_BACKLIGHT,
+ *   - MMAL_PARAM_EXPOSUREMODE_SPOTLIGHT,
+ *   - MMAL_PARAM_EXPOSUREMODE_SPORTS,
+ *   - MMAL_PARAM_EXPOSUREMODE_SNOW,
+ *   - MMAL_PARAM_EXPOSUREMODE_BEACH,
+ *   - MMAL_PARAM_EXPOSUREMODE_VERYLONG,
+ *   - MMAL_PARAM_EXPOSUREMODE_FIXEDFPS,
+ *   - MMAL_PARAM_EXPOSUREMODE_ANTISHAKE,
+ *   - MMAL_PARAM_EXPOSUREMODE_FIREWORKS,
+ *
+ * 
+ */
+	{
+		MMAL_PARAMETER_EXPOSUREMODE_T exp_mode = {
+			{ MMAL_PARAMETER_EXPOSURE_MODE, sizeof (exp_mode)}, MMAL_PARAM_EXPOSUREMODE_BACKLIGHT};
+			
+		mmal_port_parameter_set(camera->control, &exp_mode.hdr);
+		
+	}
+	
+/**
+ * Set the aWB (auto white balance) mode for images
+ * @param camera Pointer to camera component
+ * @param awb_mode Value to set from
+ *   - MMAL_PARAM_AWBMODE_OFF,
+ *   - MMAL_PARAM_AWBMODE_AUTO,
+ *   - MMAL_PARAM_AWBMODE_SUNLIGHT,
+ *   - MMAL_PARAM_AWBMODE_CLOUDY,
+ *   - MMAL_PARAM_AWBMODE_SHADE,
+ *   - MMAL_PARAM_AWBMODE_TUNGSTEN,
+ *   - MMAL_PARAM_AWBMODE_FLUORESCENT,
+ *   - MMAL_PARAM_AWBMODE_INCANDESCENT,
+ *   - MMAL_PARAM_AWBMODE_FLASH,
+ *   - MMAL_PARAM_AWBMODE_HORIZON,
+ * 
+ */
+ 
+
+ 	{
+		MMAL_PARAMETER_AWBMODE_T param = {
+			{ MMAL_PARAMETER_AWB_MODE, sizeof (param)}, MMAL_PARAM_AWBMODE_AUTO};
+			
+		mmal_port_parameter_set(camera->control, &param.hdr);
+		
+	}
+	
+	 	{
+		MMAL_PARAMETER_MIRROR_T mirror = {
+			{MMAL_PARAMETER_MIRROR, sizeof(mirror)}, MMAL_PARAM_MIRROR_HORIZONTAL};
+			
+		mmal_port_parameter_set(camera->output[2], &mirror.hdr);
+		
+	}
 
     format = camera_video_port->format;
 
@@ -321,7 +402,7 @@ int main(int argc, char** argv) {
                     fps = opencv_frames;
                 }
 
-                printf("  OpenCV Frame = %d, Framerate = %.2f fps \n", opencv_frames, fps);
+               // printf("  OpenCV Frame = %d, Framerate = %.2f fps \n", opencv_frames, fps);
             }
 
             graphics_resource_fill(img_overlay, 0, 0, GRAPHICS_RESOURCE_WIDTH, GRAPHICS_RESOURCE_HEIGHT, GRAPHICS_RGBA32(0, 0, 0, 0x00));
@@ -329,43 +410,85 @@ int main(int argc, char** argv) {
 
 
             if (1) {
+				//this time - last time > 5 seconds {haarL = 20; haarH = 150;}
+				
+				
                 cvResize(userdata.image, userdata.image2, CV_INTER_LINEAR);
-                CvSeq* objects = cvHaarDetectObjects(userdata.image2, userdata.cascade, userdata.storage, 1.4, 3, 0, cvSize(100, 100), cvSize(150, 150));
-                CvRect* r;
+				
+                objects = cvHaarDetectObjects(userdata.image2, userdata.cascade, userdata.storage, haarScale, 1, 0, cvSize(haarL, haarL), cvSize(haarH, haarH));
                 // Loop through objects and draw boxes
                 if (objects != 0) {
                     if (objects->total > 0) {
                         int ii;
+						
                         for (ii = 0; ii < objects->total; ii++) {
                             r = (CvRect*) cvGetSeqElem(objects, ii);
 
-                            printf("  Face %d [%d, %d, %d, %d] [%d, %d, %d, %d]\n", ii, r->x, r->y, r->width, r->height, (int) ((float) r->x * r_w), (int) (r->y * r_h), (int) (r->width * r_w), (int) (r->height * r_h));
-
+                            //printf("  Face %d [%d, %d, %d, %d] [%d, %d, %d, %d]\n", ii, r->x, r->y, r->width, r->height, (int) ((float) r->x * r_w), (int) (r->y * r_h), (int) (r->width * r_w), (int) (r->height * r_h));
+						
 
                             //graphics_resource_fill(img_overlay, r->x * r_w, r->y * r_h, r->width * r_w, r->height * r_h, GRAPHICS_RGBA32(0xff, 0, 0, 0x88));
                             //graphics_resource_fill(img_overlay, r->x * r_w + 8, r->y * r_h + 8, r->width * r_w - 16 , r->height * r_h - 16, GRAPHICS_RGBA32(0, 0, 0, 0x00));
-                            graphics_resource_fill(img_overlay, r->x, r->y, r->width, r->height, GRAPHICS_RGBA32(0xff, 0, 0, 0x88));
-                            graphics_resource_fill(img_overlay, r->x + 4, r->y + 4, r->width - 8, r->height - 8, GRAPHICS_RGBA32(0, 0, 0, 0x00));
+                            graphics_resource_fill(img_overlay, r->x, r->y, r->width, r->height, GRAPHICS_RGBA32(0xff, 0, 0, 0xaa));
+                            graphics_resource_fill(img_overlay, r->x + 1, r->y + 1, r->width - 2, r->height - 2, GRAPHICS_RGBA32(0, 0, 0, 0x00));
+							
+					
+					
+							//last time = current time;
 
 
-                        }
-                    } else {
-                        //printf("No Face detected\n");
-                    }
-                } else {
+						} 
+						printf("  r->width:%d, scaleFactor:%d, haarScale:%f, haarL:%i, haarH:%i, FPS %.2f\n", r->width, scaleFactor, haarScale, haarL, haarH, fps);
+						//zoom/focus/distance filtered for processing speed
+						if (r->width < 0)  {scaleFactor = 10; haarScale = 1.1;}
+						if (r->width > 60) {scaleFactor = 12; haarScale = 1.1;}
+						if (r->width < 60) {scaleFactor = 9; haarScale = 1.1;}
+						if (r->width < 50) {scaleFactor = 8;  haarScale = 1.1;}
+						if (r->width < 40) {scaleFactor = 6;  haarScale = 1.1;}
+						if (r->width < 30 && r->width > 0) {scaleFactor = 5;  haarScale = 1.1;}
+						
+						
+						
+				
+					haarL = r->width - scaleFactor;
+					haarH = r->width + scaleFactor;
+					if (haarL < 20) haarL = 20;
+					if (haarH > 80) haarH = 80;
+					}
+				/*sprintf(text, "Width = %d, Height = %d", r->width, r->height);
+			
+					graphics_resource_render_text_ext(img_overlay2, 0, 0,
+                    GRAPHICS_RESOURCE_WIDTH,
+                    GRAPHICS_RESOURCE_HEIGHT,
+                    GRAPHICS_RGBA32(0xff, 0x00, 0x00, 0xff),
+                    GRAPHICS_RGBA32(0, 0, 0, 0x00), 
+                    text, strlen(text), 25);
+					*/
+				} 
+				
+					
+					
+                   // } else {
+						
+						
+						
+				
+                 else {
                     printf("!! Face detectiona failed !!\n");
                 }
 
             }
 
-            sprintf(text, "Video = %.2f FPS, OpenCV = %.2f FPS", userdata.video_fps, fps);
+            sprintf(text, "%.2f FPS, CV %.2f FPS, %d", userdata.video_fps, fps, r->width);
+			//sprintf(text, "Width = %.2f, Height = %.2f", r->width, r->height);
+			
             graphics_resource_render_text_ext(img_overlay2, 0, 0,
                     GRAPHICS_RESOURCE_WIDTH,
                     GRAPHICS_RESOURCE_HEIGHT,
-                    GRAPHICS_RGBA32(0x00, 0xff, 0x00, 0xff), /* fg */
-                    GRAPHICS_RGBA32(0, 0, 0, 0x00), /* bg */
+                    GRAPHICS_RGBA32(0x00, 0xff, 0x00, 0xff),
+                    GRAPHICS_RGBA32(0, 0, 0, 0x00),
                     text, strlen(text), 25);
-
+			
             graphics_display_resource(img_overlay, 0, 1, 0, 0, display_width, display_height, VC_DISPMAN_ROT0, 1);
             graphics_display_resource(img_overlay2, 0, 2, 0, display_width / 16, GRAPHICS_RESOURCE_WIDTH, GRAPHICS_RESOURCE_HEIGHT, VC_DISPMAN_ROT0, 1);
 
