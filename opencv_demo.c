@@ -474,7 +474,7 @@ int main(int argc, char** argv) {
 						
 				
                  else {
-                    printf("!! Face detectiona failed !!\n");
+                    printf("!! Face detection failed !!\n");
                 }
 
             }
